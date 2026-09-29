@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass
+@dataclass 
 class Order:
     symbol: str
     side: str                     # "buy" 或 "sell"

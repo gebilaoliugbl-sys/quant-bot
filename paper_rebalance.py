@@ -25,6 +25,7 @@ import csv
 from datetime import datetime, timezone
 
 from quant.alpaca import PaperBroker
+from quant.notify import notify
 from quant.paths import LOG_DIR, STOP_FILE
 from quant.rebalance import plan_orders
 from quant.risk import check_orders
@@ -33,6 +34,7 @@ WEIGHTS = {"SPY": 1 / 3, "IEF": 1 / 3, "GLD": 1 / 3}
 CASH_BUFFER = 0.01  # 留 1% 现金不投，防止下单时价格变动导致钱不够
 LOG_FILE = LOG_DIR / "paper_orders.csv"
 RUN_FILE = LOG_DIR / "paper_runs.csv"
+RUN_TITLES = {"no_trade": "月度检查：不用交易", "blocked": "被风控拦下，没有下单", "traded": "调仓完成"}
 
 
 def main():
@@ -57,6 +59,8 @@ def main():
     pending = broker.open_orders()
     if pending:
         print(f"还有 {len(pending)} 笔单子没成交（可能在排队等开盘）。等它们处理完再运行，避免重复下单")
+        if args.auto:
+            notify("量化机器人：有单子没成交", f"还有 {len(pending)} 笔单子在等成交，今天先不动")
         return
 
     positions = {p["symbol"]: p for p in broker.positions()}
@@ -75,7 +79,7 @@ def main():
     if not orders:
         print("\n各部分都接近目标比例，这次不用交易")
         if submit:
-            record_run("no_trade")
+            record_run("no_trade", "各部分都接近目标比例")
         return
     print("\n打算下的单：")
     for o in orders:
@@ -105,9 +109,9 @@ def main():
     for symbol in WEIGHTS:
         if not broker.asset(symbol)["fractionable"]:
             raise SystemExit(f"{symbol} 不支持买小数股，这个程序暂时处理不了")
-    clock = broker.clock()
-    if not clock["is_open"]:
-        print(f"\n现在美股休市，单子会排队到下个交易日开盘成交（下次开盘：{clock['next_open']}）")
+    market_open = broker.clock()["is_open"]
+    if not market_open:
+        print("\n现在美股休市，单子会排队到下个交易日开盘成交")
 
     print("\n下单结果：")
     for o in orders:
@@ -118,7 +122,10 @@ def main():
         print(f"  {o.symbol} {o.side}：订单号 {result['id']}，状态 {result['status']}")
         append_row(LOG_FILE, ["time_utc", "symbol", "side", "amount_usd", "qty", "order_id", "status"],
                    [now_utc(), o.symbol, o.side, f"{o.amount:.2f}", o.qty or "", result["id"], result["status"]])
-    record_run("traded", f"{len(orders)} 笔单子")
+    summary = "；".join(f"{'卖出' if o.side == 'sell' else '买入'} {o.symbol} {o.amount:,.0f} 美元" for o in orders)
+    if not market_open:
+        summary += "（现在休市，开盘后成交）"
+    record_run("traded", summary)
     print(f"\n已记到 {LOG_FILE}")
 
 
@@ -145,7 +152,9 @@ def checked_this_month():
 
 
 def record_run(result, detail=""):
+    """记下这次检查的结果，同时发通知告诉你。"""
     append_row(RUN_FILE, ["time_utc", "result", "detail"], [now_utc(), result, detail])
+    notify(f"量化机器人：{RUN_TITLES[result]}", detail)
 
 
 def append_row(path, header, row):
@@ -158,5 +167,18 @@ def append_row(path, header, row):
         writer.writerow(row)
 
 
+def run():
+    """入口：运行 main。出错时先发通知，再照常报错，错误详情会留在日志里。"""
+    try:
+        main()
+    except SystemExit as e:
+        if e.code not in (None, 0):  # 带着错误信息退出，比如找不到密钥、密钥被拒
+            notify("量化机器人出错", str(e.code))
+        raise
+    except Exception as e:
+        notify("量化机器人出错", f"{type(e).__name__}：{e}")
+        raise
+
+
 if __name__ == "__main__":
-    main()
+    run()

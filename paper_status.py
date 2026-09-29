@@ -23,7 +23,7 @@ def main():
     broker = PaperBroker()
     account = broker.account()
     equity, last_close = float(account["equity"]), float(account["last_equity"])
-    print(f"账户总值 {equity:,.2f} 美元，其中现金 {float(account['cash']):,.2f} 美元")
+    print(f"账户总值 {float(account['equity']):,.2f} 美元，其中现金 {float(account['cash']):,.2f} 美元")
     print(f"今天盈亏 {equity - last_close:+,.2f} 美元（{(equity - last_close) / last_close:+.2%}）\n")
 
     positions = broker.positions()
