@@ -28,6 +28,13 @@ SPLIT = "2016-01-01"
 
 
 def main():
+    runs, rate, trend = build()
+    report(runs, rate, trend)
+    plot(runs)
+
+
+def build():
+    """返回 (runs, rate, trend)：两个策略的日收益、每天的国债利息、B 每个月的目标比例。"""
     close = pd.DataFrame({t: load_prices(t)["Close"] for t in ASSETS}).dropna()
     rate = load_prices("^IRX")["Close"].reindex(close.index).ffill() / 100 / TRADING_DAYS  # 国债年利率换成每天的利息
     returns = close.pct_change().assign(CASH=rate)
@@ -50,9 +57,7 @@ def main():
     for name, t in targets.items():
         t = t[ready.astype(bool)].set_index(month_starts[ready.astype(bool)])
         runs[name] = monthly_portfolio(returns, t, COST_BPS)
-
-    report(runs, rate.loc[start:], trend[ready.astype(bool)])
-    plot(runs)
+    return runs, rate.loc[start:], trend[ready.astype(bool)]
 
 
 def stats(r, rate):
