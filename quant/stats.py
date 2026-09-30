@@ -4,11 +4,14 @@ import numpy as np
 import pandas as pd
 
 
-def regress(y: pd.Series, X: pd.DataFrame) -> dict:
+def regress(y: pd.Series, X: pd.DataFrame, robust: bool = False) -> dict:
     """最小二乘回归 y = alpha + X·beta + 误差。
 
-    返回每个系数的估计值、标准误、t 值，以及 R²（y 的波动有多少能被 X 解释）。
+    返回每个系数的估计值、标准误、t 值，R²（y 的波动有多少能被 X 解释），以及误差的标准差。
     t 值的绝对值大于 2，大致表示有 95% 的把握这个系数不是 0，不是运气。
+
+    robust=True 用 White 稳健标准误。普通算法假设每一期误差的大小都差不多；
+    金融数据里动荡时期的误差往往大得多，这时普通算法算出的 t 值不准，稳健算法不做这个假设。
     """
     data = pd.concat([y, X], axis=1).dropna()
     target = data.iloc[:, 0].to_numpy()
@@ -19,7 +22,12 @@ def regress(y: pd.Series, X: pd.DataFrame) -> dict:
         resid = target - design @ coef
         n, k = design.shape
         sigma2 = resid @ resid / (n - k)                                   # 误差的方差
-        stderr = np.sqrt(np.diag(sigma2 * np.linalg.inv(design.T @ design)))
+        bread = np.linalg.inv(design.T @ design)
+        if robust:  # White（HC0）：用每一期自己的误差平方，而不是统一的 sigma2
+            cov = bread @ ((design * resid[:, None] ** 2).T @ design) @ bread
+        else:
+            cov = sigma2 * bread
+        stderr = np.sqrt(np.diag(cov))
         centered = target - target.mean()
         r2 = 1 - resid @ resid / (centered @ centered)
         t = coef / stderr
@@ -31,5 +39,6 @@ def regress(y: pd.Series, X: pd.DataFrame) -> dict:
         "stderr": pd.Series(stderr, index=names),
         "t": pd.Series(t, index=names),
         "r2": r2,
+        "resid_std": np.sqrt(sigma2),
         "n": n,
     }
