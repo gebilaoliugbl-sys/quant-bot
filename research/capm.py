@@ -17,15 +17,10 @@ import pandas as pd
 from matplotlib.ticker import PercentFormatter
 
 from quant.data import load_prices
-from quant.metrics import TRADING_DAYS
+from quant.metrics import TRADING_DAYS, to_monthly
 from quant.plot import COLORS, INK_SECONDARY, plt, save_figure, use_style
 from quant.stats import regress
 from research import survivorship, trend_filter
-
-
-def monthly(daily):
-    """日收益换成月收益：一个月里每天的 (1 + 收益) 连乘，再减 1。"""
-    return (1 + daily).groupby(daily.index.to_period("M")).prod() - 1
 
 
 def main():
@@ -45,8 +40,8 @@ def main():
     rows, points = {}, {}
     for name, r in strategies.items():
         days = r.index  # 大盘和国债利息都只取策略有数据的那些天，月份才对得齐
-        y = monthly(r) - monthly(rate.loc[days])
-        x = (monthly(market.loc[days]) - monthly(rate.loc[days])).rename("beta")
+        y = to_monthly(r) - to_monthly(rate.loc[days])
+        x = (to_monthly(market.loc[days]) - to_monthly(rate.loc[days])).rename("beta")
         res = regress(y, x.to_frame())
         rows[name] = {
             "期间": f"{days[0]:%Y-%m} 至 {days[-1]:%Y-%m}",

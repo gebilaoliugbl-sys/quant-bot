@@ -38,6 +38,11 @@ def max_drawdown(returns: pd.Series) -> float:
     return drawdown(returns).min()
 
 
+def to_monthly(returns):
+    """日收益换成月收益：一个月里每天的 (1 + 收益) 连乘，再减 1。索引变成月份。"""
+    return (1 + returns).groupby(returns.index.to_period("M")).prod() - 1
+
+
 def summary(returns: pd.Series) -> pd.Series:
     return pd.Series({
         "年化收益": cagr(returns),
