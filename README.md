@@ -26,7 +26,7 @@ quant/
   paths.py              密钥、日志、紧急停止开关放在哪
   notify.py             发 macOS 通知
   stats.py              统计工具：最小二乘回归（系数、标准误、t 值、R²）
-  factors.py            Kenneth French 数据库的因子数据（1926 年至今，按月，没有幸存者偏差）
+  factors.py            Kenneth French 数据库的因子数据（1926 年至今，按月和按天，没有幸存者偏差）
   data.py               回测工具：下载并缓存日线（Yahoo Finance）
   backtest.py           回测工具：向量化回测
   metrics.py            回测工具：年化收益、波动、夏普、最大回撤
