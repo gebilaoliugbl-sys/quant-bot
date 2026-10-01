@@ -4,6 +4,7 @@
 密钥从 ~/quant-bot/.env 读取（见 quant/paths.py），不写在代码里。
 """
 
+import time
 import warnings
 
 # macOS 自带的 Python 用的是旧版 SSL 库，urllib3 会打印一条无害的警告
@@ -15,6 +16,8 @@ from quant.paths import ENV_FILE  # noqa: E402
 
 PAPER_URL = "https://paper-api.alpaca.markets"
 KEY_NAMES = ("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY")
+# 查询时连不上网，依次等这么多秒再试，加起来 5 分钟。Mac 刚从睡眠里醒来时，Wi-Fi 常常要过一会儿才连上
+RETRY_WAITS = (30, 30, 60, 60, 120)
 
 
 def load_keys():
@@ -43,7 +46,19 @@ class PaperBroker:
         })
 
     def _request(self, method, path, **kwargs):
-        response = self.session.request(method, PAPER_URL + path, timeout=15, **kwargs)
+        # 只有查询（GET）连不上时才重试。下单（POST）只发一次：网络断的那一刻单子可能已经到了 Alpaca，
+        # 只是回复没传回来，再发一次就成了两笔
+        waits = list(RETRY_WAITS) if method == "GET" else []
+        while True:
+            try:
+                response = self.session.request(method, PAPER_URL + path, timeout=15, **kwargs)
+                break
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if not waits:
+                    raise
+                wait = waits.pop(0)
+                print(f"连不上 Alpaca（{type(e).__name__}），{wait} 秒后重试")
+                time.sleep(wait)
         if response.status_code in (401, 403):
             raise SystemExit("Alpaca 拒绝了密钥：检查 .env 里填的是不是模拟账户（Paper）的密钥")
         if not response.ok:
